@@ -79,7 +79,9 @@ def register():
         # Ejecutar Query
         try :
             cursor.execute(query)
-            query = f"INSERT INTO users (name, participant) VALUES ('{user.association}','{user.username}'"
+            if not check_exist_table(f"messagesassociation{user.association}"):
+                cursor.execute(f"CREATE TABLE messagesassociation{user.association}  (     id INT(10) UNSIGNED AUTO_INCREMENT PRIMARY KEY ,     sender VARCHAR(50) NOT NULL,     subject VARCHAR(100) NOT NULL,     recipient VARCHAR(50) NOT NULL,     readed BOOLEAN NOT NULL,     times TIMESTAMP NOT NULL,     message VARCHAR(4000) NOT NULL    );")
+            query = f"INSERT INTO associations (name, participant) VALUES ('{user.association}','{user.username}')"
             cursor.execute(query)
             response = jsonify({'message': 'Usuario registrado correctamente.'})
             response.status_code = 201
@@ -100,39 +102,34 @@ def register():
 
 # Crear la ruta para registrar usuarios
 @app.route('/register/association', methods=['POST'])
-def register():
+def register_associations():
     response=None
     # Obtenemos los datos del usuario
     association = request.form.get('association')
-    user = request.form.get('user')
     # Crear la instancia de Cursor
     cursor = mysql.connection.cursor()
     # Crear Query
 
-    query = f"SELECT * FROM associations WHERE name = '{association}'"
+    query = f"SELECT * FROM users WHERE username = '{association}'"
     cursor.execute(query)
     existing_user = cursor.fetchone()
-    participantes = cursor.fetchall()
-
     if existing_user: 
-        response = jsonify(error="El nombre de usuario ya está registrado.")
+        response = jsonify(error="El nombre de asociación ya está registrado.")
         response.status_code = 400
     else:
-        query = f"INSERT INTO users (username, password, association, fromname) VALUES ('{user.username}', '{user._password_hash}', '{user.association}', '{user.fromname}')"
-        # Ejecutar Query
-        try :
-            cursor.execute(query)
-            response = jsonify({
-                'message': 'Usuario registrado correctamente.'
-                })
+        query = f"SELECT * FROM associations WHERE name = '{association}'"
+        cursor.execute(query)
+        existing_user = cursor.fetchone()
+        if existing_user:
+            response = jsonify(error="El nombre de asociación ya está registrado.")
+            response.status_code = 400            
+        else:
+            response = jsonify({'message': 'Usuario registrado correctamente.'})
             response.status_code = 201
-        except:
-            response = jsonify(error = "Error al registrar usuario")
-            response.status_code = 400
-    #Crear tabla de asociacion
+
     if 200 <= response.status_code <= 299  :
-        if not check_exist_table(f"messagesassociation{user.username}"):
-            query = f"CREATE TABLE messagesassociation{user.username} (     id INT(10) UNSIGNED AUTO_INCREMENT PRIMARY KEY ,     sender VARCHAR(50) NOT NULL,     subject VARCHAR(100) NOT NULL,     recipient VARCHAR(50) NOT NULL,     readed BOOLEAN NOT NULL,     times TIMESTAMP NOT NULL,     message VARCHAR(4000) NOT NULL    );"
+        if not check_exist_table(f"messagesassociation{association}"):
+            query = f"CREATE TABLE messagesassociation{association} (     id INT(10) UNSIGNED AUTO_INCREMENT PRIMARY KEY ,     sender VARCHAR(50) NOT NULL,     subject VARCHAR(100) NOT NULL,     recipient VARCHAR(50) NOT NULL,     readed BOOLEAN NOT NULL,     times TIMESTAMP NOT NULL,     message VARCHAR(4000) NOT NULL    );"
             cursor.execute(query)
     # Cerrar Cursor
     cursor.close()
@@ -140,7 +137,6 @@ def register():
     mysql.connection.commit()
     # Retornar respuesta
     return response
- 
 
 # Crear la ruta para iniciar sesión
 @app.route('/login', methods=['POST'])
@@ -203,16 +199,22 @@ def send_message():
     cursor = mysql.connection.cursor()
     message = Message(None, sender, subject, recipient, readed, timestamp, messagetext )
     try:
-        if not check_exist_table(f'messages{message.recipient}'):
+        if check_exist_table(f'messagesassociation{message.recipient}'):
+            query = f"INSERT INTO messagesassociation{message.recipient} (sender, subject, recipient, readed, times, message) VALUES ('{message.sender}', '{message.subject}', '{message.recipient}', '{message.readed}', '{message.timestamp}', '{message.message}')"
+            cursor.execute(query)
+            cursor.execute(f"SELECT * FROM association WHERE name = {message.recipient}")
+            association = cursor.fetchall()
+            for associate in association:
+                participant = associate[1] 
+                cursor.execute(f"INSERT INTO message{participant}  (sender, subject, recipient, readed, times, message) VALUES ('{message.recipient}', '{message.subject}', '{participant}', '{message.readed}', '{message.timestamp}', '{message.message}')")
+        elif not check_exist_table(f'messages{message.recipient}'):
             query = f"CREATE TABLE messages{message.recipient} (     id INT(10) UNSIGNED AUTO_INCREMENT PRIMARY KEY ,     sender VARCHAR(50) NOT NULL,     subject VARCHAR(100) NOT NULL,     recipient VARCHAR(50) NOT NULL,     readed BOOLEAN NOT NULL,     times TIMESTAMP NOT NULL,     message VARCHAR(4000) NOT NULL    );"
             cursor.execute(query)
         if not check_exist_table(f'messages{message.sender}'):
             query = f"CREATE TABLE messages{message.sender} (     id INT(10) UNSIGNED AUTO_INCREMENT PRIMARY KEY ,     sender VARCHAR(50) NOT NULL,     subject VARCHAR(100) NOT NULL,     recipient VARCHAR(50) NOT NULL,     readed BOOLEAN NOT NULL,     times TIMESTAMP NOT NULL,     message VARCHAR(4000) NOT NULL    );"
             cursor.execute(query)
-        if check_exist_table(f'messagesassociation{message.recipient}'):
-            query = f"INSERT INTO messagesassociation{message.recipient} (sender, subject, recipient, readed, times, message) VALUES ('{message.sender}', '{message.subject}', '{message.recipient}', '{message.readed}', '{message.timestamp}', '{message.message}')"
-            cursor.execute(query)
-        cursor.execute(f"INSERT INTO messages{message.recipient} (sender, subject, recipient, readed, times, message) VALUES ('{message.sender}', '{message.subject}', '{message.recipient}', '{message.readed}', '{message.timestamp}', '{message.message}')")
+        if not check_exist_table(f'messagesassociation{message.recipient}'):
+            cursor.execute(f"INSERT INTO messages{message.recipient} (sender, subject, recipient, readed, times, message) VALUES ('{message.sender}', '{message.subject}', '{message.recipient}', '{message.readed}', '{message.timestamp}', '{message.message}')")
         cursor.execute(f"INSERT INTO messages{message.sender} (sender, subject, recipient, readed, times, message) VALUES ('{message.sender}', '{message.subject}', '{message.recipient}', '{message.readed}', '{message.timestamp}',' {message.message}')")
         response = jsonify({'message': 'Mensaje enviado correctamente.'})
         response.status_code = 201
