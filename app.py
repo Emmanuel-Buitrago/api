@@ -1,9 +1,12 @@
 from flask import Flask, jsonify, request
 from flask_mysqldb import MySQL
 from passlib.hash import pbkdf2_sha256
+from flask_cors import CORS
+
 
 # Crear la instancia de la aplicación Flask
 app = Flask(__name__)
+CORS(app, resources={r"/*": {"origins": "http://localhost:8100"}})
 app.secret_key = 'my_secret_key'
 
 app.config['MYSQL_HOST'] = '127.0.0.1'
@@ -160,7 +163,11 @@ def login():
         if data:
             pssw = data[2]
             if pssw ==user._password_hash:
-                response = jsonify({'message': 'Ingreso correcto!'})
+                response = jsonify({'message': 'Ingreso correcto!',
+                                    'id': data[0],
+                                    'fromname': data[3],
+                                    'association': data[4],
+                                    })
                 response.status_code = 201
             else:
                 response = jsonify({'message': 'Nombre de usuario o contraseña incorrectas!'})
@@ -239,7 +246,11 @@ def get_messages(user):
     for row in data1:
         sender = row[1]
         recipient = row[3]
-        key = f"{sender}-{recipient}"  # Etiqueta de la pareja sender-recipient
+        key = ""
+        if user == sender:
+            key = f"{recipient}"
+        else: key = f"{sender}"
+          # Etiqueta de la pareja sender-recipient
 
         if key in data_list:
             data_list[key].append(row)
@@ -247,7 +258,7 @@ def get_messages(user):
             data_list[key] = [row]
 
     association = get_association_by_user(user)    
-    query = f"SELECT * FROM messages{association} WHERE sender = '{user}' OR recipient = '{user}';  "
+    query = f"SELECT * FROM messagesassociation{association} WHERE sender = '{user}' OR recipient = '{user}';  "
     cur.execute(query)
     data2 = cur.fetchall()
 
